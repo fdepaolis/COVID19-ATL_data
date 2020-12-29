@@ -1,0 +1,243 @@
+---
+title: 'COVID19 in the United States: Data by State'
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'ATL.html'))})
+author:
+- name: Fernando DePaolis
+  affiliation:  github page https://github.com/fdepaolis/FernandoDePaolis.github.io
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: united
+    highlight: haddock
+    css: style.css
+    toc: yes
+    toc_depth: 6
+    toc_float:
+      collapse: false
+      smooth_scroll: false
+    pdf_document:
+      toc: yes
+      toc_depth: '6'
+subtitle: Analysis using data from The COVID Tracking Project.
+---
+<div align="right"><font face="Verdana"><font color="#8B0000">This site is under construction. Visit it again for updates</font></font></div>
+
+#
+```{r echo=FALSE, results = "hide", message = FALSE, warning=FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+## Introduction
+In this project, we use the datasets available from [The COVID Tracking Project](https://covidtracking.com/){target="_blank"}
+
+### Loading needed libraries
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+library(pacman) # functions to manage packages (load, path, etc.)
+# We load packages using pacman::p-load()
+pacman::p_load(httr, jsonlite, tidyverse, forecast, ffp2)
+```
+For the main R code, we use functions in the following libraries:
+
+* [httr](https://cran.r-project.org/web/packages/httr/){target="_blank"}  Useful tools for working with HTTP organised by HTTP verbs (GET(), POST(), etc)
+
+* [jsonlite](https://cran.r-project.org/web/packages/jsonline/){target="_blank"}  A fast JSON parser and generator optimized for statistical data and the web.
+
+* [tidyverse](https://cran.r-project.org/web/packages/tidyverse/){target="_blank"}  Set of packages for data cleaning and reshaping data
+
+* [fpp2](https://cran.r-project.org/web/packages/fpp2/){target="_blank"}  All data sets required for the examples and exercises in the book "Forecasting: principles and practice" by Rob J Hyndman and George Athanasopoulos. All packages required to run the examples are also loaded (expsmooth; fma; forecast; ggplot2).
+
+## Processing Current and Historical Data
+### Reading datasets
+```{r echo=TRUE, results = "hide"}
+### Interacts with API (application programing interface)
+# Current data
+ATL_API_curr = GET("https://covidtracking.com/api/v1/states/current.json")  # usually a day or 2 behind
+ATL_API_data_curr = fromJSON(rawToChar(ATL_API_curr$content))
+
+# Historical data
+ATL_API_hist = GET("https://covidtracking.com/api/v1/states/daily.json")  # usually a day or 2 behind
+ATL_API_data_hist = fromJSON(rawToChar(ATL_API_hist$content))
+```
+
+#### Removing territories
+```{r echo=TRUE, results = "hide"}
+# removes territories
+territ <- c("AS","GU","MP","PR","VI")
+ATL_API_data_curr_2 <- ATL_API_data_curr
+# 
+for (i in 5){
+ATL_API_data_curr_2 <- subset(ATL_API_data_curr_2,
+        ATL_API_data_curr_2$state !=territ[i]
+        )
+}
+
+ATL_API_data_hist_2 <- ATL_API_data_hist
+
+for (i in 5){
+ATL_API_data_hist_2 <- subset(ATL_API_data_hist_2,
+        ATL_API_data_curr_2$state !=territ[i]
+        )
+}
+```
+
+## Analyzing Time Series
+
+### Linearization Algorithms
+In this section we use linear regression to estimate models that approximate the actual data. We can then use those model for predicting values (out of sample estimation). For additional information, visit [this site](https://rpubs.com/RStudio_knight/136748)
+
+### Exponential fitting
+Exponential model of the form $y=e^{ax}$ are those in which the independent variable is an exponent.
+```{r echo=TRUE, results = "hide"}
+CALIF_1 <- subset(ATL_API_data_hist, state=='CA', select=c(date,state,positive))
+CALIF_2 <-CALIF_1 %>%
+            arrange(date)   # sort ascending and changes row numbers
+
+# Transformations
+
+CALIF_2$LN.y   <- log(CALIF_2$positive)
+CALIF_2$days   <- seq.int(nrow(CALIF_2))-1
+```
+
+
+```{r echo=TRUE, results = "hide"}
+# Exponential model LN.y=f(x)
+Exp.model_1 <- lm(CALIF_2$LN.y~CALIF_2$days)
+
+# Compute the constant “a” for the exponential model
+a.exponential<-exp(Exp.model_1$coeff[1]) 
+
+
+# y = e^(ax); 
+# where a = exp(Exp.model_1$coeff[1]) and x is CALIF_2$days
+```
+
+
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+# Exponential fitting
+CALIF_2[nrow(CALIF_2)+3,] <- NA
+
+CALIF_2$Future.x <- seq.int(nrow(CALIF_2))-1
+
+CALIF_2$y.exp<-a.exponential*exp(Exp.model_1$coeff[2]*CALIF_2$Future.x)
+
+p <- ggplot() + 
+  geom_line(data = CALIF_2, aes(days, positive/1000000, color = "Actual"), size = 1.15) + 
+  geom_line(data = CALIF_2, aes(days, y.exp/1000000, color = "Exponential fitting"), size = 0.9) +
+  labs(title=" California-Positive Cases - Exponential Fitting",
+          x ="Days since recording", 
+          y = "Total Cases [millions]") +
+  scale_color_manual(name = "Cases", 
+                     values = c("Actual" = "#005496", "Exponential fitting" = "#AF46B4"))
+
+
+p + theme(panel.background = element_rect(fill='gray90', colour='#999999'))
+```
+
+### Power fitting
+Power models of the form $y=ax^b$ have the independent raised to a power.
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+
+# Power
+CALIF_2$yZero     <- CALIF_2$positive - CALIF_2$positive[1]
+CALIF_2$LN.yZero  <- log(CALIF_2$yZero)
+CALIF_2$LN.x    <- log(CALIF_2$days)
+k <- nrow(CALIF_1)
+
+Power.Model <- lm(CALIF_2$LN.yZero[3:k] ~ CALIF_2$LN.x[3:k])
+a.power<-exp(Power.Model$coeff[1]) 
+
+
+# y = a * x^b + c; 
+# where x is 'CALIF_2$days'; a = exp(Power.Model$coeff[1]) ; 
+# b = Power.Model$coeff[2];
+# and c = CALIF_2$positive[1] (the first value in the series)
+
+CALIF_2$y.power <- a.power*(CALIF_2$Future.x^Power.Model$coeff[2])+CALIF_2$positive[1]
+
+
+p <- ggplot() + 
+  geom_line(data = CALIF_2, aes(days, positive/1000000, color = "Actual"), size = 1.15) + 
+  geom_line(data = CALIF_2, aes(days, y.power/1000000, color = "Power fitting"), size = 0.9) +
+  labs(title=" California-Positive Cases - Power Fitting",
+          x ="Days since recording", 
+          y = "Total Cases [millions]") +
+  scale_color_manual(name = "Cases", 
+                     values = c("Actual" = "#005496", "Power fitting" = "#964200"))
+
+
+p + theme(panel.background = element_rect(fill='gray90', colour='#999999'))
+```
+
+### Analysis
+We have estimated to sets of values using linear fitting. The transformation of coordinates created different 'spaces' in which the relationships remain linear. In the case of exponential fitting the space is log-log, while in the case of power fitting the space is log-log. The allows us to maintain all the assumptions of linear regression while estimate non-linear model. 
+
+Now, it is a matter of determining which estimate fits the original data best. We could use *graphic methods* to visualize the differences between the estimated models and the actual data, which we did in the charts above. We see that the *Exponential* model grows much faster than the actual data. The *Power* model seems to follow the actual data quite closely.
+
+We can also use numeric measures to estimate the quality of our estimations. A very simple approach is to analyze the residuals, that is the difference between actual and estimated values.
+
+$~$
+
+### Residuals
+This section is under construction
+
+$~$
+
+## Time-series Algorithms
+In this section we discuss approaches specific to time-series. In R, there is a variety of packages that can handle time-series (ts) objects.
+<br><br>
+The first step is to identify the time series. In our case, that the 'historical' series and we will limit that to data for the state of California. 
+
+
+### Data Preparation, create time series  
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+
+# California dataset
+# Extracts the column containing the number of positive cases
+CAL_positive <- CALIF_2[,3] 
+```
+
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+# Updates the latest date to use as end date in time series
+end_date <- paste(
+  substr(as.character(CALIF_1[1, 1]), 1, 4),
+  substr(as.character(CALIF_1[1, 1]), 5, 6),
+  substr(as.character(CALIF_1[1, 1]), 7, 8),
+  sep = "-") 
+```
+
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+# Creates a daily Date object - helps my work on dates
+inds <- seq(as.Date("2020-03-04"), as.Date(end_date), by = "day") 
+
+# Creates a time series object
+CAL_ts <- ts(CAL_positive, 
+           start = c(2020, as.numeric(format(inds[1], "%j"))),
+           frequency = 365) 
+```
+
+### Transform into a stationary time series by removing the trend
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+# detrend with first difference
+CAL_1_diff <- diff(CAL_ts)
+```
+
+### Fitting a 'naive' model with the forecast package
+For more details about the theoretical underpinnings see [Hyndman and Athanasopoulos](https://otexts.com/fpp2/toolbox.html){target="_blank"}
+
+```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
+# fitting
+#naive forecast (snaive is for series with seasonality)
+fit_CAL <- naive(CAL_1_diff)   # using the forecast package
+
+# print(summary(fit_CAL))   # uncomment this line to get the model results
+checkresiduals(fit_CAL)
+```
+<br><br>
+Let's look at the residuals chart above. The panel on the bottom left shows the Autocorrelation function for different lags. The 'spikes' in the bars indicate that the autocorrelation function is exceeding predetermined limits in a number of instances. Ideally, we want all the spikes to be within those limits, represented in the chart by dashed, blue lines.
+
+

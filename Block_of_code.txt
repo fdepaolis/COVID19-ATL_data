@@ -1,0 +1,15 @@
+=====================
+ATL project
+=====================
+
+Blocks
+1- Get data from API - explain multiple ways of doing that
+2- Subsetting remove cases that meet a criteria
+3- Linearization algorithms
+    a-Power fitting
+    b-Exponential fitting
+    c-which one is better -> residual analysis
+4- Time-series analysis (fpp2 package)
+    a-Remove trend
+    b-
+5- 
