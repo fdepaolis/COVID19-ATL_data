@@ -7,7 +7,7 @@ knit: (function(input_file, encoding) {
  output_file=file.path(dirname(input_file), out_dir, 'ATL.html'))})
 author:
 - name: Fernando DePaolis
-  affiliation:  github page https://github.com/fdepaolis/FernandoDePaolis.github.io
+  affiliation:  github page https://github.com/fdepaolis
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
