@@ -1,5 +1,5 @@
 ---
-title: 'COVID19 in the United States: Data by State'
+title: 'COVID19 in the United States: A Time Series Approach'
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
@@ -33,7 +33,7 @@ opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
 ```
 
 ## Introduction
-In this project, we use the datasets available from [The COVID Tracking Project](https://covidtracking.com/){target="_blank"}
+In this project, we use the datasets available from [The COVID Tracking Project](https://covidtracking.com/){target="_blank"}.<font color="#00468b"><i>The data compilation stage of the project has come to an end. The research and analysis continues through May 2021. Visit the website for additional details.</i></font> We will continue using the dataset for our study of Time Series.
 
 ### Loading needed libraries
 ```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
@@ -219,8 +219,11 @@ CAL_ts <- ts(CAL_positive,
            start = c(2020, as.numeric(format(inds[1], "%j"))),
            frequency = 365) 
 ```
+### Transform into a stationary time series. Why?
+In short, forecasting algorithms apply only to stationary series. There are many resources on this topic (future updates will include some of them). A time series is stationary if its average, variance and autocorrelation are constant over time (see additional resources).
 
 ### Transform into a stationary time series by removing the trend
+An easy way of removing a trend (which is one of the determinants of non-statinarity) is to create a new series in which each element is the difference between an observation and its immediate predecessor.
 ```{r echo=TRUE, results = "hide", message = FALSE, warning=FALSE}
 # detrend with first difference
 CAL_1_diff <- diff(CAL_ts)
@@ -240,4 +243,6 @@ checkresiduals(fit_CAL)
 <br><br>
 Let's look at the residuals chart above. The panel on the bottom left shows the Autocorrelation function for different lags. The 'spikes' in the bars indicate that the autocorrelation function is exceeding predetermined limits in a number of instances. Ideally, we want all the spikes to be within those limits, represented in the chart by dashed, blue lines.
 
+### Unit Roots: another way to determine whether the series is stationary.
+This section is under construction.
 
